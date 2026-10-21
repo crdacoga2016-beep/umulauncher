@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=UmuLauncher
+Comment=Launcher ligero para juegos Windows en Linux con umu-run (Proton)
+Exec=umulauncher
+Icon=applications-games
+Terminal=false
+Type=Application
+Categories=Game;
+Keywords=umu;proton;games;launcher;wine;
+StartupWMClass=umulauncher
