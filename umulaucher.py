@@ -50,6 +50,8 @@ class UmuLauncherApp(ctk.CTk):
         self._current_cols = 0
         self._resize_job = None
         self._open_menu_frame = None
+        self._launching: set = set()
+        self._running: Dict[str, Any] = {}
 
         self._search_var = tk.StringVar()
         self._search_var.trace_add("write", lambda *_: self.refresh_library())
@@ -472,7 +474,23 @@ class UmuLauncherApp(ctk.CTk):
         self.refresh_library()
         self.status.configure(text=f"🗑 «{game.get('name')}» eliminado")
 
+    def _game_key(self, game) -> str:
+        return str(game.get("id") or game.get("exe") or game.get("name") or "")
+
     def launch(self, game, keep_open: bool = False):
+        key = self._game_key(game)
+
+        if key in self._running:
+            self.status.configure(
+                text=f"⏳ «{game.get('name')}» ya está en ejecución")
+            return
+
+        if key in self._launching:
+            self.status.configure(
+                text=f"⏳ «{game.get('name')}» se está iniciando…")
+            return
+
+        self._launching.add(key)
         self.status.configure(text=f"🚀 Iniciando {game.get('name')}…")
         self.update_idletasks()
 
@@ -482,9 +500,14 @@ class UmuLauncherApp(ctk.CTk):
         if not keep_open and self.settings.get("close_on_launch", True):
             close_cb = self.quit_app
 
-        result = launch_game(game)
+        try:
+            result = launch_game(game)
+        except Exception:
+            log.exception("launch: error inesperado al iniciar %s", game.get("name"))
+            result = None
 
         if not result:
+            self._launching.discard(key)
             self.status.configure(text="❌ Fallo al iniciar — revisa el log")
             return
 
@@ -495,6 +518,9 @@ class UmuLauncherApp(ctk.CTk):
 
     def _finish_launch(self, game, proc, log_file, started_at,
                        keep_open, close_cb):
+        key = self._game_key(game)
+        self._launching.discard(key)
+
         if proc.poll() is not None:
             try:
                 content = log_file.read_text(encoding="utf-8", errors="replace")
@@ -518,6 +544,9 @@ class UmuLauncherApp(ctk.CTk):
         spawn_playtime_watcher(GAMES_FILE, proc.pid, game.get("id", ""),
                                started_at)
 
+        self._running[key] = proc
+        self._poll_running(key, proc)
+
         if keep_open:
             self.status.configure(text="🔧 Modo debug activo (launcher sigue abierto)")
             messagebox.showinfo(
@@ -527,7 +556,13 @@ class UmuLauncherApp(ctk.CTk):
         elif close_cb:
             close_cb()
         else:
-            self.status.configure(text="🎮 Juego lanzado — launcher sigue abierto")
+            self.status.configure(text="🎮 Juego en ejecución — launcher sigue abierto")
+
+    def _poll_running(self, key: str, proc):
+        if proc.poll() is None:
+            self.after(2000, self._poll_running, key, proc)
+        else:
+            self._running.pop(key, None)
 
     def quit_app(self):
         try:
