@@ -335,6 +335,7 @@ class UmuLauncherApp(ctk.CTk):
         query = self._search_var.get().strip().lower()
         filtered = [g for g in self.games
                     if query in g.get("name", "").lower()] if query else list(self.games)
+        filtered.sort(key=lambda g: g.get("last_played", 0) or 0, reverse=True)
 
         if not filtered:
             msg = (f"No se encontraron juegos para “{query}”" if query else
